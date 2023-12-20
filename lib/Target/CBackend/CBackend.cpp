@@ -2580,6 +2580,7 @@ void CWriter::generateHeader(Module &M) {
       case Intrinsic::umin:
       case Intrinsic::smax:
       case Intrinsic::smin:
+      case Intrinsic::freeze:
         intrinsicsToDefine.push_back(&*I);
         continue;
       }
@@ -4652,6 +4653,10 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
     case Intrinsic::smin:
       Out << "  r = a < b ? a : b;\n";
       break;
+    
+    case Intrinsic::freeze:
+      Out << "  r = a;\n";
+      break;
     }
 
   } else {
@@ -4775,6 +4780,7 @@ bool CWriter::lowerIntrinsics(Function &F) {
           case Intrinsic::umin:
           case Intrinsic::smax:
           case Intrinsic::smin:
+          case Intrinsic::freeze:
             // We directly implement these intrinsics
             break;
 
@@ -5088,6 +5094,7 @@ bool CWriter::visitBuiltinCall(CallInst &I, Intrinsic::ID ID) {
   case Intrinsic::umin:
   case Intrinsic::smax:
   case Intrinsic::smin:
+  case Intrinsic::freeze:
     return false; // these use the normal function call emission
   }
 }
