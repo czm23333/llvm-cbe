@@ -573,7 +573,7 @@ raw_ostream &CWriter::printTypeNameForAddressableValue(raw_ostream &Out,
   if (!isEmptyType(Ty))
     return printTypeName(Out, Ty, isSigned);
   else
-    return Out << "char /* (empty) */";
+    return Out << "char ";
 }
 
 // Pass the Type* and the variable name and this prints out the variable
@@ -1332,7 +1332,7 @@ void CWriter::printConstant(Constant *CPV, enum OperandContext Context) {
       VectorType *VT = cast<VectorType>(CPV->getType());
       cwriter_assert(!isEmptyType(VT));
       CtorDeclTypes.insert(VT);
-      Out << "/*undef*/llvm_ctor_";
+      Out << "llvm_ctor_";
       printTypeString(Out, VT, false);
       Out << "(";
       Constant *Zero = Constant::getNullValue(VT->getElementType());
@@ -1347,7 +1347,6 @@ void CWriter::printConstant(Constant *CPV, enum OperandContext Context) {
 
     } else {
       Constant *Zero = Constant::getNullValue(CPV->getType());
-      Out << "/*UNDEF*/";
       return printConstant(Zero, Context);
     }
     return;
@@ -1443,10 +1442,10 @@ void CWriter::printConstant(Constant *CPV, enum OperandContext Context) {
         headerUseNanInf();
         if (FPC->getType() == Type::getFloatTy(FPC->getContext()))
           Out << "LLVM_NAN" << (Val == QuietNaN ? "" : "S") << "F(\"" << Buffer
-              << "\") /*nan*/ ";
+              << "\") ";
         else
           Out << "LLVM_NAN" << (Val == QuietNaN ? "" : "S") << "(\"" << Buffer
-              << "\") /*nan*/ ";
+              << "\") ";
       } else if (std::isinf(V)) {
         // The value is Inf
         if (V < 0)
@@ -1455,7 +1454,7 @@ void CWriter::printConstant(Constant *CPV, enum OperandContext Context) {
         Out << "LLVM_INF"
             << (FPC->getType() == Type::getFloatTy(FPC->getContext()) ? "F"
                                                                       : "")
-            << " /*inf*/ ";
+            << " ";
       } else {
         std::string Num;
 #if HAVE_PRINTF_A && ENABLE_CBE_PRINTF_A
@@ -1581,7 +1580,7 @@ void CWriter::printConstant(Constant *CPV, enum OperandContext Context) {
 
   case Type::PointerTyID:
     if (isa<ConstantPointerNull>(CPV)) {
-      Out << "((void*)/*NULL*/0)";
+      Out << "((void*)0)";
       break;
     } else if (GlobalValue *GV = dyn_cast<GlobalValue>(CPV)) {
       writeOperand(GV);
@@ -2438,7 +2437,6 @@ void CWriter::generateHeader(Module &M) {
   }
 
   // Include required standard headers
-  OutHeaders << "/* Provide Declarations */\n";
   if (headerIncStdarg())
     OutHeaders << "#include <stdarg.h>\n";
   if (headerIncSetjmp())
@@ -2454,13 +2452,10 @@ void CWriter::generateHeader(Module &M) {
   OutHeaders << "#ifndef __cplusplus\ntypedef unsigned char bool;\n#endif\n";
   OutHeaders << "\n";
 
-  Out << "\n\n/* Global Declarations */\n";
-
   // First output all the declarations for the program, because C requires
   // Functions & globals to be declared before they are used.
   if (!M.getModuleInlineAsm().empty()) {
-    Out << "\n/* Module asm statements */\n"
-        << "__asm__ (";
+    Out << "__asm__ (";
 
     // Split the string into lines, to make it easier to read the .ll file.
     std::string Asm = M.getModuleInlineAsm();
@@ -2478,8 +2473,7 @@ void CWriter::generateHeader(Module &M) {
     }
     Out << "\"";
     PrintEscapedString(std::string(Asm.begin() + CurPos, Asm.end()), Out);
-    Out << "\");\n"
-        << "/* End Module asm statements */\n";
+    Out << "\");\n";
   }
 
   // collect any remaining types
@@ -2502,7 +2496,7 @@ void CWriter::generateHeader(Module &M) {
 
   // Global variable declarations...
   if (!M.global_empty()) {
-    Out << "\n/* External Global Variable Declarations */\n";
+    Out << "\n";
     for (Module::global_iterator I = M.global_begin(), E = M.global_end();
          I != E; ++I) {
       if (!I->isDeclaration())
@@ -2550,7 +2544,7 @@ void CWriter::generateHeader(Module &M) {
   }
 
   // Function declarations
-  Out << "\n/* Function Declarations */\n";
+  Out << "\n";
 
   // Store the intrinsics which will be declared/defined below.
   SmallVector<Function *, 16> intrinsicsToDefine;
@@ -2648,7 +2642,7 @@ void CWriter::generateHeader(Module &M) {
 
   // Output the global variable definitions and contents...
   if (!M.global_empty()) {
-    Out << "\n\n/* Global Variable Definitions and Initialization */\n";
+    Out << "\n";
     for (Module::global_iterator I = M.global_begin(), E = M.global_end();
          I != E; ++I) {
       declareOneGlobalVariable(&*I);
@@ -2657,7 +2651,7 @@ void CWriter::generateHeader(Module &M) {
 
   // Alias declarations...
   if (!M.alias_empty()) {
-    Out << "\n/* External Alias Declarations */\n";
+    Out << "\n";
     for (Module::alias_iterator I = M.alias_begin(), E = M.alias_end(); I != E;
          ++I) {
       cwriter_assert(!I->isDeclaration() && !isEmptyType(I->getValueType()));
@@ -2711,7 +2705,7 @@ void CWriter::generateHeader(Module &M) {
     }
   }
 
-  Out << "\n\n/* LLVM Intrinsic Builtin Function Bodies */\n";
+  Out << "\n";
 
   // Loop over all select operations
   if (!SelectDeclTypes.empty())
@@ -3371,7 +3365,7 @@ void CWriter::generateHeader(Module &M) {
   }
 
   if (!M.empty())
-    Out << "\n\n/* Function Bodies */\n";
+    Out << "\n";
 
   if (!FCmpOps.empty())
     headerUseForceInline();
@@ -3564,7 +3558,7 @@ void CWriter::printModuleTypes(raw_ostream &Out) {
 
   // Loop over all structures then push them into the stack so they are
   // printed in the correct order.
-  Out << "\n/* Types Declarations */\n";
+  Out << "\n";
 
   // Collect types referenced by structs and global functions, and
   // forward-declare the structs.
@@ -3580,7 +3574,7 @@ void CWriter::printModuleTypes(raw_ostream &Out) {
         forwardDeclareStructs(Out, *I, TypesPrinted);
   }
 
-  Out << "\n/* Function definitions */\n";
+  Out << "\n";
 
   // Print types used as function pointers.
   for (auto &I : UnnamedFunctionIDs) {
@@ -3596,7 +3590,7 @@ void CWriter::printModuleTypes(raw_ostream &Out) {
     Out << ";\n";
   }
 
-  Out << "\n/* Types Definitions */\n";
+  Out << "\n";
 
   for (auto it = TypedefDeclTypes.begin(), end = TypedefDeclTypes.end();
        it != end; ++it) {
@@ -3739,7 +3733,7 @@ void CWriter::printFunction(Function &F) {
     Type *StructTy = F.getParamStructRetType(0);
     Out << "  ";
     printTypeName(Out, StructTy, false)
-        << " StructReturn;  /* Struct return temporary */\n";
+        << " StructReturn;\n";
 
     Out << "  ";
     printTypeName(Out, StructTy, false)
@@ -3766,7 +3760,7 @@ void CWriter::printFunction(Function &F) {
         headerUseAligns();
         Out << " __POSTFIXALIGN__(" << Alignment << ")";
       }
-      Out << ";    /* Address-exposed local */\n";
+      Out << ";\n";
       PrintedVar = true;
     } else if (!isEmptyType(I->getType()) && !isInlinableInst(*I)) {
       if (!canDeclareLocalLate(*I)) {
@@ -3811,8 +3805,7 @@ void CWriter::printFunction(Function &F) {
 }
 
 void CWriter::printLoop(Loop *L) {
-  Out << "  do {     /* Syntactic loop '" << L->getHeader()->getName()
-      << "' to make GCC happy */\n";
+  Out << "  do {\n";
   for (unsigned i = 0, e = L->getBlocks().size(); i != e; ++i) {
     BasicBlock *BB = L->getBlocks()[i];
     Loop *BBLoop = LI->getLoopFor(BB);
@@ -3821,8 +3814,7 @@ void CWriter::printLoop(Loop *L) {
     else if (BB == BBLoop->getHeader() && BBLoop->getParentLoop() == L)
       printLoop(BBLoop);
   }
-  Out << "  } while (1); /* end of syntactic loop '"
-      << L->getHeader()->getName() << "' */\n";
+  Out << "  } while (1);\n";
 }
 
 void CWriter::printBasicBlock(BasicBlock *BB) {
@@ -4010,7 +4002,7 @@ void CWriter::printPHICopiesForSuccessor(BasicBlock *CurBlock,
       Out << std::string(Indent, ' ');
       Out << "  " << GetValueName(&*I) << "_PT = ";
       writeOperand(IV, ContextCasted);
-      Out << ";   /* for PHI node */\n";
+      Out << ";\n";
     }
   }
 }
@@ -4844,9 +4836,6 @@ void CWriter::visitCallInst(CallInst &I) {
     Out << " = ";
   }
 
-  if (I.isTailCall())
-    Out << " /*tail*/ ";
-
   // If we are calling anything other than a function, then we need to cast
   // since it will be an opaque pointer.
   bool NeedsCast = !isa<Function>(Callee);
@@ -4884,7 +4873,7 @@ void CWriter::visitCallInst(CallInst &I) {
   bool PrintedArg = false;
   FunctionType *FTy = I.getFunctionType();
   if (FTy->isVarArg() && !FTy->getNumParams()) {
-    Out << "0 /*dummy arg*/";
+    Out << "0 ";
     PrintedArg = true;
   }
 
@@ -5574,7 +5563,7 @@ void CWriter::visitExtractElementInst(ExtractElementInst &I) {
   if (isa<UndefValue>(I.getOperand(0))) {
     Out << "(";
     printTypeName(Out, I.getType());
-    Out << ") 0/*UNDEF*/";
+    Out << ") 0";
   } else {
     Out << "(";
     writeOperand(I.getOperand(0));
@@ -5608,7 +5597,6 @@ void CWriter::visitShuffleVectorInst(ShuffleVectorInst &SVI) {
       Out << ", ";
     int SrcVal = SVI.getMaskValue(i);
     if ((unsigned)SrcVal >= NumInputElts * 2) {
-      Out << "/*undef*/";
       printConstant(Zero, ContextCasted);
     } else {
       // If SrcVal belongs [0, n - 1], it extracts value from <v1>
@@ -5669,7 +5657,7 @@ void CWriter::visitExtractValueInst(ExtractValueInst &EVI) {
   if (isa<UndefValue>(EVI.getOperand(0))) {
     Out << "(";
     printTypeName(Out, EVI.getType());
-    Out << ") 0/*UNDEF*/";
+    Out << ") 0";
   } else {
     writeOperand(EVI.getOperand(0));
     for (const unsigned *b = EVI.idx_begin(), *i = b, *e = EVI.idx_end();
