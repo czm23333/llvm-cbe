@@ -2580,7 +2580,6 @@ void CWriter::generateHeader(Module &M) {
       case Intrinsic::umin:
       case Intrinsic::smax:
       case Intrinsic::smin:
-      case Intrinsic::freeze:
         intrinsicsToDefine.push_back(&*I);
         continue;
       }
@@ -3877,6 +3876,11 @@ void CWriter::printBasicBlock(BasicBlock *BB) {
   visit(*BB->getTerminator());
 }
 
+void CWriter::visitFreezeInst(FreezeInst &I) {
+  CurInstr = &I;
+  writeOperand(I.getOperand(0), ContextCasted);
+}
+
 // Specific Instruction type classes... note that all of the casts are
 // necessary because we use the instruction classes as opaque types...
 void CWriter::visitReturnInst(ReturnInst &I) {
@@ -4653,10 +4657,6 @@ void CWriter::printIntrinsicDefinition(FunctionType *funT, unsigned Opcode,
     case Intrinsic::smin:
       Out << "  r = a < b ? a : b;\n";
       break;
-    
-    case Intrinsic::freeze:
-      Out << "  r = a;\n";
-      break;
     }
 
   } else {
@@ -4780,7 +4780,6 @@ bool CWriter::lowerIntrinsics(Function &F) {
           case Intrinsic::umin:
           case Intrinsic::smax:
           case Intrinsic::smin:
-          case Intrinsic::freeze:
             // We directly implement these intrinsics
             break;
 
@@ -5094,7 +5093,6 @@ bool CWriter::visitBuiltinCall(CallInst &I, Intrinsic::ID ID) {
   case Intrinsic::umin:
   case Intrinsic::smax:
   case Intrinsic::smin:
-  case Intrinsic::freeze:
     return false; // these use the normal function call emission
   }
 }

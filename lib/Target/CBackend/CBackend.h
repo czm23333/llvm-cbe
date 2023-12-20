@@ -297,6 +297,8 @@ private:
   void visitICmpInst(ICmpInst &I);
   void visitFCmpInst(FCmpInst &I);
 
+  void visitFreezeInst(FreezeInst &I);
+
   void visitCastInst(CastInst &I);
   void visitSelectInst(SelectInst &I);
   void visitCallInst(CallInst &I);
