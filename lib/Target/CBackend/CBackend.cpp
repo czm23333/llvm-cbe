@@ -30,6 +30,7 @@
 #include <cmath>
 #include <cstdio>
 #include <iostream>
+#include <unordered_map>
 
 // Some ms header decided to define setjmp as _setjmp, undo this for this file
 // since we don't need it
@@ -258,6 +259,9 @@ bool CWriter::runOnFunction(Function &F) {
   return Modified;
 }
 
+static std::unordered_map<std::string, unsigned long long> mangleId;
+static unsigned long long currentId = 0;
+
 static std::string CBEMangle(const std::string &S) {
   std::string Result;
 
@@ -272,7 +276,14 @@ static std::string CBEMangle(const std::string &S) {
     }
   }
 
-  return Result;
+  if (Result.length() <= 16) return Result;
+
+  auto iter = mangleId.find(Result);
+  if (iter != mangleId.end()) return "M" + utostr(iter->second);
+  else {
+    mangleId[Result] = currentId;
+    return "M" + utostr(currentId++);
+  }
 }
 
 raw_ostream &CWriter::printTypeString(raw_ostream &Out, Type *Ty,
@@ -283,11 +294,11 @@ raw_ostream &CWriter::printTypeString(raw_ostream &Out, Type *Ty,
 
     if (!ST->isLiteral() && !ST->getName().empty()) {
       std::string Name{ST->getName()};
-      return Out << "struct_" << CBEMangle(Name);
+      return Out << "S_" << CBEMangle(Name);
     }
 
     unsigned id = UnnamedStructIDs.getOrInsert(ST);
-    return Out << "unnamed_" + utostr(id);
+    return Out << "U_" + utostr(id);
   }
 
   if (Ty->isPointerTy()) {
@@ -349,15 +360,15 @@ raw_ostream &CWriter::printTypeString(raw_ostream &Out, Type *Ty,
 std::string CWriter::getStructName(StructType *ST) {
   cwriter_assert(ST->getNumElements() != 0);
   if (!ST->isLiteral() && !ST->getName().empty())
-    return "struct l_struct_" + CBEMangle(ST->getName().str());
+    return "struct S_" + CBEMangle(ST->getName().str());
 
   unsigned id = UnnamedStructIDs.getOrInsert(ST);
-  return "struct l_unnamed_" + utostr(id);
+  return "struct U_" + utostr(id);
 }
 
 std::string CWriter::getFunctionName(FunctionInfoVariant FIV) {
   unsigned id = UnnamedFunctionIDs.getOrInsert(FIV);
-  return "l_fptr_" + utostr(id);
+  return "FP_" + utostr(id);
 }
 
 std::string CWriter::getArrayName(ArrayType *AT) {
@@ -367,7 +378,7 @@ std::string CWriter::getArrayName(ArrayType *AT) {
   // value semantics (avoiding the array "decay").
   cwriter_assert(!isEmptyType(AT));
   printTypeName(ArrayInnards, AT->getElementType(), false);
-  return "struct l_array_" + utostr(AT->getNumElements()) + '_' +
+  return "struct AR_" + utostr(AT->getNumElements()) + '_' +
          CBEMangle(ArrayInnards.str());
 }
 
@@ -377,7 +388,7 @@ std::string CWriter::getVectorName(VectorType *VT) {
   // Vectors are handled like arrays
   cwriter_assert(!isEmptyType(VT));
   printTypeName(VectorInnards, VT->getElementType(), false);
-  return "struct l_vector_" + utostr(NumberOfElements(VT)) + '_' +
+  return "struct V_" + utostr(NumberOfElements(VT)) + '_' +
          CBEMangle(VectorInnards.str());
 }
 
@@ -1708,7 +1719,7 @@ std::string CWriter::GetValueName(const Value *Operand) {
       VarName += ch;
   }
 
-  return "llvm_cbe_" + VarName;
+  return "L_" + VarName;
 }
 
 /// writeInstComputationInline - Emit the computation for the specified
@@ -3767,7 +3778,7 @@ void CWriter::printFunction(Function &F) {
       if (isa<PHINode>(*I)) { // Print out PHI node temporaries as well...
         Out << "  ";
         printTypeName(Out, I->getType(), false)
-            << ' ' << (GetValueName(&*I) + "__PHI_TEMPORARY");
+            << ' ' << (GetValueName(&*I) + "_PT");
         Out << ";\n";
       }
       PrintedVar = true;
@@ -3997,7 +4008,7 @@ void CWriter::printPHICopiesForSuccessor(BasicBlock *CurBlock,
     Value *IV = PN->getIncomingValueForBlock(CurBlock);
     if (!isa<UndefValue>(IV) && !isEmptyType(IV->getType())) {
       Out << std::string(Indent, ' ');
-      Out << "  " << GetValueName(&*I) << "__PHI_TEMPORARY = ";
+      Out << "  " << GetValueName(&*I) << "_PT = ";
       writeOperand(IV, ContextCasted);
       Out << ";   /* for PHI node */\n";
     }
@@ -4057,7 +4068,7 @@ void CWriter::visitPHINode(PHINode &I) {
   CurInstr = &I;
 
   writeOperand(&I);
-  Out << "__PHI_TEMPORARY";
+  Out << "_PT";
 }
 
 void CWriter::visitUnaryOperator(UnaryOperator &I) {
